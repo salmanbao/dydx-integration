@@ -154,7 +154,7 @@ const config: HardhatUserConfig = {
     },
   },
   mocha: {
-    timeout: 8000000,
+    timeout: 100000000,
   },
   etherscan: {
     apiKey: process.env.ETHERSCAN_API_KEY,
@@ -177,7 +177,7 @@ const config: HardhatUserConfig = {
         params: {
           logs: true, noCompile: false,
           testFiles: [
-            "./test/src/token.spec.ts",
+            "./test/src/SoloMargin.spec.ts",
           ]
         }
       }],
@@ -193,7 +193,7 @@ const config: HardhatUserConfig = {
           params: {
             noCompile: true,
             testFiles: [
-              "./test/src/token.spec.ts",
+              "./test/src/SoloMargin.spec.ts",
             ]
           }
         }],

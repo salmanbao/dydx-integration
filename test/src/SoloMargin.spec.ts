@@ -2,9 +2,16 @@ import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
 import { Contract, Signer } from "ethers";
 import BigNumber from "bignumber.js";
-import { Order, OrderMapper, OrderType, TestOrder, ZeroExV2Order } from '@dydxprotocol/exchange-wrappers';
+import {
+  Order,
+  OrderMapper,
+  OrderType,
+  TestOrder,
+  ZeroExV2Order,
+} from "@dydxprotocol/exchange-wrappers";
 import hre, { ethers } from "hardhat";
 import {
+  SoloMargin__factory,
   TokenA__factory,
   UsdcPriceOracle__factory,
   WETH9__factory,
@@ -13,6 +20,7 @@ import {
 import {
   ONES_255,
   PolynomialInterestSetter,
+  SoloMargin,
   usdcAddress,
   UsdcPriceOracle,
   wethAddress,
@@ -82,44 +90,45 @@ describe("Test Token", function () {
     );
     const OperationImpl = await OperationImplFactory.deploy();
 
-    const SoloMarginFactory = await ethers.getContractFactory("SoloMargin", {
-      libraries: {
-        AdminImpl: AdminImpl.address,
-        OperationImpl: OperationImpl.address,
-      },
-    });
-    soloMarginInstance = await SoloMarginFactory.connect(signer).deploy(RiskParams, RiskLimits);
+    soloMarginInstance = SoloMargin__factory.connect(SoloMargin, signer);
+
+    // const SoloMarginFactory = await ethers.getContractFactory("SoloMargin", {
+    //   libraries: {
+    //     AdminImpl: AdminImpl.address,
+    //     OperationImpl: OperationImpl.address,
+    //   },
+    // });
+    // soloMarginInstance = await SoloMarginFactory.connect(signer).deploy(RiskParams, RiskLimits);
 
     hre.tracer.nameTags[owner.address] = "ADMIN";
     hre.tracer.nameTags[user.address] = "USER1";
     hre.tracer.nameTags[soloMarginInstance.address] = "SOLO-MARGIN";
 
     usdc = TokenA__factory.connect(usdcAddress, signer);
-    weth = WETH9__factory.connect(wethAddress,signer)
+    weth = WETH9__factory.connect(wethAddress, signer);
     usdcPriceOracle = UsdcPriceOracle__factory.connect(UsdcPriceOracle, signer);
     wethPriceOracle = WethPriceOracle__factory.connect(WethPriceOracle, signer);
-    const marginPremium = { value: '0' };
-    const spreadPremium = { value: '0' };
-    await usdc.connect(signer).approve(soloMarginInstance.address,ONES_255)
-    await soloMarginInstance
-      .connect(signer)
-      .ownerAddMarket(
-        usdc.address,
-        UsdcPriceOracle,
-        PolynomialInterestSetter,
-        marginPremium,
-        spreadPremium
-      );
-      await soloMarginInstance
-      .connect(signer)
-      .ownerAddMarket(
-        weth.address,
-        WethPriceOracle,
-        PolynomialInterestSetter,
-        marginPremium,
-        spreadPremium
-      );
-
+    const marginPremium = { value: "0" };
+    const spreadPremium = { value: "0" };
+    await usdc.connect(signer).approve(soloMarginInstance.address, ONES_255);
+    // await soloMarginInstance
+    //   .connect(signer)
+    //   .ownerAddMarket(
+    //     usdc.address,
+    //     UsdcPriceOracle,
+    //     PolynomialInterestSetter,
+    //     marginPremium,
+    //     spreadPremium
+    //   );
+    //   await soloMarginInstance
+    //   .connect(signer)
+    //   .ownerAddMarket(
+    //     weth.address,
+    //     WethPriceOracle,
+    //     PolynomialInterestSetter,
+    //     marginPremium,
+    //     spreadPremium
+    //   );
   });
 
   it("Deposit usdc", async function () {
@@ -137,10 +146,10 @@ describe("Test Token", function () {
           sign: true,
           denomination: 0,
           ref: 0,
-          value: "300000000",
+          value: "1000000", // 20 USDC   352.113441
         },
-        primaryMarketId: 0,
-        secondaryMarketId: 0,
+        primaryMarketId: 2,
+        secondaryMarketId: 2,
         otherAddress: signer.address,
         otherAccountId: 0,
         data: [],
@@ -150,16 +159,20 @@ describe("Test Token", function () {
   });
 
   it("open short position", async () => {
+    // await usdc.transfer(ZeroExV2ExchangeWrapper,"100000000")
+    // await weth.deposit({value:parseEther("20")})
+    // await weth.transfer(SoloMargin,parseEther("20"))
+
     let signer: SignerWithAddress = await Impersonate();
     let actions: ActionArgs[] = [];
     let accounts: AccountInfo[] = [];
-    const amount = new BigNumber(100);
-    const heldMarket = new BigNumber(0); // usdc market
-    const owedMarket = new BigNumber(1); // usdc market
+    const amount = new BigNumber(30000000);
+    const heldMarket = new BigNumber(2); // usdc market
+    const owedMarket = new BigNumber(0); // weth market
     // transfer action
     actions.push({
       actionType: 2,
-      accountId: 1,
+      accountId: 0,
       amount: {
         sign: false,
         denomination: 0,
@@ -167,19 +180,20 @@ describe("Test Token", function () {
         value: amount.toString(),
       },
       primaryMarketId: heldMarket.toString(),
-      secondaryMarketId: heldMarket.toString(),
+      secondaryMarketId: owedMarket.toString(),
       otherAddress: ZERO,
-      otherAccountId: 0,
+      otherAccountId: 1,
       data: [],
     });
-    accounts.push({
-      owner: signer.address,
-      number: 0,
-    },
-    {
-      owner: signer.address,
-      number: 1,
-    }
+    accounts.push(
+      {
+        owner: signer.address,
+        number: 0,
+      },
+      {
+        owner: signer.address,
+        number: 1,
+      }
     );
 
     // const order:ZeroExV2Order = {
@@ -201,51 +215,68 @@ describe("Test Token", function () {
     //   takerAssetData:"",
     //   takerFee:new BigNumber(0)
     // }
+    // borrow = 1724.411907
+    // supply = 2279160.336260
+    // supply = 2279198.530288
+    // supply = 2279216.294954
+    // supply = 2279216.294954
+    // supply = 2279216.294954
+    // supply = 2279217.183186
+    // supply = 2279226.065519
 
-    const order :TestOrder = {
-      type:OrderType.Test,
-      exchangeWrapperAddress:ZeroExV2ExchangeWrapper,
-      originator:signer.address,
-      makerToken:usdcAddress,
-      makerAmount:amount,
-      takerToken:wethAddress,
-      takerAmount:amount,
-      allegedTakerAmount:amount,
-      desiredMakerAmount:amount
-    }
-
-      const orderMapper = new OrderMapper(1);
-      const {
-        bytes,
-        exchangeWrapperAddress,
-      }: {
-        bytes: number[],
-        exchangeWrapperAddress: string,
-      } = orderMapper.mapOrder(order);
-      const orderData = bytes.map((a :number): number[] => [a]);
-      accounts.push({
+    // 113999987
+    // 352.113441
+    console.log(await soloMarginInstance.callStatic.getMarketTotalPar(2));
+    console.log(
+      await soloMarginInstance.callStatic.getAccountWei({
         owner: signer.address,
-        number: 2,
-      }
-      );
+        number:0
+      },2)
+    );
 
-      actions.push({
-        actionType:4,
-        accountId:2,
-        amount:{
-          sign:true,
-          denomination:0,
-          ref:0,
-          value:amount.times(-1).toString()
-        },
-        primaryMarketId:owedMarket.toString(),
-        secondaryMarketId:heldMarket.toString(),
-        otherAddress:exchangeWrapperAddress,
-        otherAccountId:2,
-        data:bytes
-      })
+    const order: TestOrder = {
+      type: OrderType.Test,
+      exchangeWrapperAddress: ZeroExV2ExchangeWrapper,
+      originator: signer.address,
+      makerToken: usdcAddress,
+      makerAmount: amount,
+      takerToken: wethAddress,
+      takerAmount: new BigNumber(parseEther("0.1").toString()),
+      allegedTakerAmount: amount,
+      desiredMakerAmount: new BigNumber(parseEther("0.1").toString()),
+    };
 
-    await soloMarginInstance.connect(signer).operate(accounts, actions);
+    const orderMapper = new OrderMapper(1);
+    const {
+      bytes,
+      exchangeWrapperAddress,
+    }: {
+      bytes: number[];
+      exchangeWrapperAddress: string;
+    } = orderMapper.mapOrder(order);
+    const orderData = bytes.map((a: number): number[] => [a]);
+    // accounts.push({
+    //   owner: signer.address,
+    //   number: 1,
+    // }
+    // );
+    // actions.push({
+    //   actionType:4,
+    //   accountId:0,
+    //   amount:{
+    //     sign:false,
+    //     denomination:0,
+    //     ref:1,
+    //     value:amount.toString()
+    //   },
+    //   primaryMarketId:heldMarket.toString(),
+    //   secondaryMarketId:owedMarket.toString(),
+    //   otherAddress:exchangeWrapperAddress,
+    //   otherAccountId:1,
+    //   data:bytes
+    // })
+
+    // await soloMarginInstance.connect(signer).operate(accounts, actions);
   });
 });
 

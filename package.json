@@ -11,6 +11,7 @@
     "build": "hardhat compile",
     "test:logs": "hardhat test --logs",
     "watch": "hardhat watch compilation",
+    "watch:test": "hardhat watch test",
     "lint:ts": "eslint --max-warnings 0",
     "lint": "yarn fmt:sol && yarn lint:ts",
     "precommit": "yarn fmt:sol && yarn lint",
